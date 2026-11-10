@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {inflateSync} from 'node:zlib';
+import {createPrivateKey, createPublicKey, verify} from 'node:crypto';
+import {generateDemoKey} from '../src/generator.js';
+import {PRIVATE_KEY_STR} from '../src/private-key.js';
+import {makePropertyModel,serializeForSignature} from '../src/properties.js';
+const pub=createPublicKey(createPrivateKey({key:Buffer.from(PRIVATE_KEY_STR,'base64'),format:'der',type:'pkcs8'}));
+test('dynamic Description, demo flags, and inner signature verify',async()=>{
+  const fields={serverId:'DEMO-12',organisation:'Test Org',email:'a@example.org',product:'demo.product',now:'2026-11-10T12:00:00Z'};
+  const model=makePropertyModel(fields);
+  const generated=await generateDemoKey(fields);
+  assert.match(generated.properties,/Description=License for Test Org/);
+  assert.match(generated.properties,/LicenseTypeName=DEMONSTRATION/);
+  const hash=generated.properties.match(/^licenseHash=(.+)$/m)?.[1];
+  assert.ok(hash);
+  assert.ok(verify('sha1',Buffer.from(serializeForSignature(model.data)),pub,Buffer.from(hash,'base64')));
+});
+test('outer envelope and compression verify with demo public key',async()=>{
+  const {key,properties}=await generateDemoKey({serverId:'DEMO-12',organisation:'O',email:'a@b.com',product:'demo.product'});
+  const compact=key.replace(/\s/g,''),i=compact.lastIndexOf('X02');
+  assert.ok(i>0);
+  const encoded=compact.slice(0,i);
+  assert.equal(parseInt(compact.slice(i+3),31),encoded.length);
+  const bytes=Buffer.from(encoded,'base64');
+  const len=bytes.readUInt32BE(0),payload=bytes.subarray(4,4+len),sig=bytes.subarray(4+len);
+  assert.deepEqual([...payload.subarray(0,5)],[13,14,12,10,15]);
+  assert.equal(inflateSync(payload.subarray(5)).toString('utf8'),properties);
+  assert.ok(verify('sha1',payload,pub,sig));
+});
