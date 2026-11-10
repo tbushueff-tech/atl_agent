@@ -1,1 +1,10 @@
-{"name":"atl-agent-demo","private":true,"type":"module","scripts":{"test":"node --test test/*.test.mjs"}}
+{
+  "name": "atl-agent-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:java": "node test/java-interop.mjs",
+    "test:browser": "node test/browser-smoke.mjs"
+  }
+}
